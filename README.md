@@ -12,7 +12,6 @@
 git clone https://github.com/sharmithag/chitti_walker.git
 cd chitti_walker
 source /opt/ros/foxy/setup.bash
-<<<<<<< HEAD
 gazebo --verbose chitti_custom_world
 ```
 
@@ -24,8 +23,10 @@ colcon build
 ros2 launch chitti_walker chitti_walker.py
 
 ```
+
 To check rosbag file in results
 
 ```
 ros2 bag play rosbag2_2022_12_07-23_58_57
 ```
+
