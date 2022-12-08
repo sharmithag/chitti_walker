@@ -15,7 +15,7 @@ source /opt/ros/foxy/setup.bash
 <<<<<<< HEAD
 gazebo --verbose chitti_custom_world
 ```
-```
+
 IN OTHER TERMINAL
 ```
 source /opt/ros/foxy/setup.bash
