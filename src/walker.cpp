@@ -33,70 +33,83 @@ SOFTWARE.
  * @copyright Copyright (c) 2022
  *
  */
-
-#include <chrono> //NOLINT
-#include <geometry_msgs/msg/twist.hpp>
+#include <chrono> // NOLINT
 #include <memory>
+#include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 using std::placeholders::_1;
-using namespace std::chrono_literals;
-using std::placeholders::_1;
-using IMAGE = sensor_msgs::msg::Image;
-using TWIST = geometry_msgs::msg::Twist;
+using namespace std::chrono_literals; // NOLINT
 
 typedef enum {
-  FORWARD = 0,
+  FORWARD,
   STOP,
   TURN,
 } StateType;
-
+/**
+ * @brief class Chitti with walker node
+ *
+ */
 class Chitti : public rclcpp::Node {
  public:
-  Chitti() : Node("chitti"), state_(STOP) {
-    // creates publisher to publish /cmd topic
-    auto pubTopicName = "cmd";
-    publisher_ = this->create_publisher<TWIST>(pubTopicName, 10);
+  Chitti() : Node("my_walker"), state_(STOP) {
+    // creates publisher to publish walker/cmd topic
+    publisher_ =
+        this->create_publisher<geometry_msgs::msg::Twist>("walker/cmd", 10);
+    rclcpp::QoS depth_qos(10);
+    depth_qos.keep_last(10);
+    depth_qos.best_effort();
+    depth_qos.durability_volatile();
 
     // creates subscriber to get /walker/depth topic
-    auto subTopicName = "/walker/depth";
-    subscription_ = this->create_subscription<IMAGE>(
-        subTopicName, 10, std::bind(&Chitti::subscribe_callback, this, _1));
-
+    auto subTopicName = "walker/depth";
+    subscription_ = this->create_subscription<sensor_msgs::msg::Image>(
+        subTopicName, depth_qos,
+        std::bind(&Chitti::subscribe_callback, this, _1));
     // create a 10Hz timer for processing
     auto processCallback = std::bind(&Chitti::process_callback, this);
-    timer_ = this->create_wall_timer(100ms, processCallback);
+    timer_ = this->create_wall_timer(1000ms, processCallback);
   }
 
  private:
-  void subscribe_callback(const IMAGE &msg) { lastImg_ = msg; }
-
+  /**
+   * @brief assign msg to lastImg
+   *
+   * @param msg
+   */
+  void subscribe_callback(const sensor_msgs::msg::Image::SharedPtr msg) {
+    lastImg_ = msg;
+  }
+  /**
+   * @brief publish cmd velocity
+   *
+   */
   void process_callback() {
     // Do nothing until the first data read
-    if (lastImg_.header.stamp.sec == 0)
+    if (lastImg_->header.stamp.sec == 0)
       return;
 
     // Create the message to publish (initialized to all 0)
-    auto message = TWIST();
+    auto message = geometry_msgs::msg::Twist();
 
     // state machine (Mealy -- output on transition)
     switch (state_) {
     case FORWARD:
-      if (hasObstacle()) {   // check transition
+      if (hasObstacle()) {  // check transition
         state_ = STOP;
         publisher_->publish(message);
         RCLCPP_INFO_STREAM(this->get_logger(), "State = STOP");
       }
       break;
     case STOP:
-      if (hasObstacle()) {   // check transition
+      if (hasObstacle()) {  // check transition
         state_ = TURN;
-        message.angular.z = 0.1;
+        message.angular.z = 0.7;
         publisher_->publish(message);
         RCLCPP_INFO_STREAM(this->get_logger(), "State = TURN");
       } else {
         state_ = FORWARD;
-        message.linear.x = -0.1;
+        message.linear.x = 0.5;
         publisher_->publish(message);
         RCLCPP_INFO_STREAM(this->get_logger(), "State = FORWARD");
       }
@@ -104,7 +117,7 @@ class Chitti : public rclcpp::Node {
     case TURN:
       if (!hasObstacle()) {  // check transition
         state_ = FORWARD;
-        message.linear.x = -0.1;
+        message.linear.x = 0.5;
         publisher_->publish(message);
         RCLCPP_INFO_STREAM(this->get_logger(), "State = FORWARD");
       }
@@ -113,13 +126,13 @@ class Chitti : public rclcpp::Node {
   }
 
   bool hasObstacle() {
-    unsigned char *dataPtr = lastImg_.data.data();
+    unsigned char *dataPtr = lastImg_->data.data();
     float *floatData = (float *)dataPtr; // NOLINT
 
     int idx;
-    for (unsigned int row = 0; row < lastImg_.height - 40; row++)
-      for (unsigned int col = 0; col < lastImg_.width; col++) {
-        idx = (row * lastImg_.width) + col;
+    for (unsigned int row = 0; row < lastImg_->height - 40; row++)
+      for (unsigned int col = 0; col < lastImg_->width; col++) {
+        idx = (row * lastImg_->width) + col;
         if (floatData[idx] < 1.0) {
           RCLCPP_INFO(this->get_logger(),
                       "row=%d, col=%d, floatData[idx] = %.2f", row, col,
@@ -134,10 +147,10 @@ class Chitti : public rclcpp::Node {
   ////////////////////////////////////////
   // member variables
   ////////////////////////////////////////
-  rclcpp::Subscription<IMAGE>::SharedPtr subscription_;
-  rclcpp::Publisher<TWIST>::SharedPtr publisher_;
+  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
   rclcpp::TimerBase::SharedPtr timer_;
-  IMAGE lastImg_;
+  sensor_msgs::msg::Image::SharedPtr lastImg_;
   StateType state_;
 };
 
